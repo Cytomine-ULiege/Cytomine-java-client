@@ -30,6 +30,8 @@ import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.*;
 
 public class Cytomine {
@@ -164,6 +166,41 @@ public class Cytomine {
         return code == 200 || code == 201 || code == 304;
     }
 
+     /**
+     * Check if Cytomine accept connection
+     */
+    public boolean isAlive() throws CytomineException {
+        try {
+            return testHostConnection();
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /**
+     * Wait for Cytomine to be ready. Retry every second until timeoutInSeconds
+     * @param timeoutInSeconds Timeout until last retry (seconds)
+     */
+    public void waitToAcceptConnection(int timeoutInSeconds) throws CytomineException {
+        waitToAcceptConnection(timeoutInSeconds, 1);
+    }
+
+    /**
+     * Wait for Cytomine to be ready. Retry every delayBetweenRetryInSeconds until timeoutInSeconds
+     * @param timeoutInSeconds Timeout until last retry (seconds)
+     * @param delayBetweenRetryInSeconds Delay between a retry (seconds)
+     */
+    public void waitToAcceptConnection(int timeoutInSeconds, int delayBetweenRetryInSeconds) throws CytomineException {
+        Instant timeAtStart = Instant.now();
+        while(Duration.between(timeAtStart, Instant.now()).toMillis() < (timeoutInSeconds * 1000L)) {
+            if (isAlive()) {
+                return;
+            }
+            try { Thread.sleep(delayBetweenRetryInSeconds* 1000L);} catch (InterruptedException ignored) {};
+        }
+        throw new CytomineException(0, "Cytomine cannot be reach on " + host);
+    }
+
     /**
      * Go to the next page of a collection
      *
@@ -272,8 +309,8 @@ public class Cytomine {
     }
 
 
-    public void uploadImage(String file, String cytomineHost) throws CytomineException {
-        uploadImage(file, null, null, cytomineHost);
+    public void uploadImage(String uploadURL, String file, String cytomineHost) throws CytomineException {
+        uploadImage(uploadURL, file, null, null, cytomineHost);
     }
 
     /**
@@ -286,8 +323,8 @@ public class Cytomine {
      * @return A response with the status, the uploadedFile and the AbstractImage list
      * @throws Exception Error during upload
      */
-    public JSONArray uploadImage(String file, Long idProject, Long idStorage, String cytomineHost) throws CytomineException {
-        return uploadImage(file, idProject, idStorage, cytomineHost, null, false);
+    public JSONArray uploadImage(String uploadURL, String file, Long idProject, Long idStorage, String cytomineHost) throws CytomineException {
+        return uploadImage(uploadURL, file, idProject, idStorage, cytomineHost, null, false);
     }
 
     /**
@@ -303,9 +340,13 @@ public class Cytomine {
      * @return A response with the status, the uploadedFile and the AbstractImage list (only if synchrone!=true)
      * @throws Exception Error during upload
      */
-    public JSONArray uploadImage(String file, Long idProject, Long idStorage, String cytomineHost, Map<String, String> properties, boolean synchrone) throws CytomineException {
+    public JSONArray uploadImage(String uploadURL, String file, Long idProject, Long idStorage, String cytomineHost, Map<String, String> properties, boolean synchrone) throws CytomineException {
 
-        //TODO creer une connection vers upload !!!
+        CytomineConnection uploadConnection = Cytomine.connection(
+                uploadURL,
+                Cytomine.getInstance().getDefaultCytomineConnection().getPublicKey(),
+                Cytomine.getInstance().getDefaultCytomineConnection().getPrivateKey(),
+                false);
 
         Map<String, String> entityParts = new HashMap<>();
         if (idProject != null) {
@@ -334,8 +375,7 @@ public class Cytomine {
             url = url + "&sync=" + true;
         }
 
-        //NON  !!! connection vers upload !!!
-        return getDefaultCytomineConnection().uploadImage(file, url, entityParts );
+        return uploadConnection.uploadImage(file, url, entityParts );
     }
 
 
@@ -507,6 +547,24 @@ public class Cytomine {
         return user.fetch(null);
     }
 
+    /**
+     * Forge an authentication token for the user with the related username and for a given validity
+     *
+     * @param username     username of the targeted user
+     * @param validity     Number of minutes for the validity of the token
+     * @return The token key that will allow temporary authentication
+     */
+    public String buildAuthenticationToken(String username, Long validity) throws CytomineException {
+        String data = "{username : " + username + ", validity : " + validity + "}";
+        JSONObject json = defaultCytomineConnection.doPost("/api/token.json", data);
+
+        if(Boolean.parseBoolean(json.get("success").toString())) {
+            JSONObject token = (JSONObject) json.get("token");
+            return token.get("tokenKey").toString();
+        }
+        return null;
+    }
+
     public User getKeys(String publicKey) throws CytomineException {
         User user = new User();
         user.addFilter("publicKeyFilter", publicKey);
@@ -527,15 +585,20 @@ public class Cytomine {
         return user.fetch();
     }*/
 
+    public Job changeStatus(Long id, Job.JobStatus status, int progress) throws CytomineException {
+        return this.changeStatus(id, status.getValue(), progress);
+    }
+
+    public Job changeStatus(Long id, Job.JobStatus status, int progress, String comment) throws CytomineException {
+        return this.changeStatus(id, status.getValue(), progress, comment);
+    }
+
     public Job changeStatus(Long id, int status, int progress) throws CytomineException {
         return this.changeStatus(id, status, progress, null);
     }
 
     public Job changeStatus(Long id, int status, int progress, String comment) throws CytomineException {
         Job job = new Job().fetch(id);
-        job.set("progress", progress);
-        job.set("status", status);
-        job.set("statusComment", comment);
         return job.update();
     }
 
@@ -754,12 +817,6 @@ public class Cytomine {
         Annotation annotation = new Annotation();
         annotation.set("wkt", wkt);
         return getDefaultCytomineConnection().doPost("/api/simplify.json?minPoint=" + min + "&maxPoint=" + max, annotation.toJSON()).toString();
-    }
-
-
-    public void indexToRetrieval(Long id, Long container, String url) throws CytomineException {
-        String data = "{id : " + id + ", container : " + container + ", url : '" + url + "'}";
-        defaultCytomineConnection.doPost("/retrieval-web/api/resource.json", data);
     }
 
 

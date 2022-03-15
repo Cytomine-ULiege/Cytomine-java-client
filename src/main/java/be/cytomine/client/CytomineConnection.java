@@ -94,6 +94,7 @@ public class CytomineConnection {
      */
     public String getPrivateKey() { return this.privateKey; }
 
+
     public User getCurrentUser() throws CytomineException {
         return getCurrentUser(false);
     }
@@ -112,6 +113,8 @@ public class CytomineConnection {
 
         //if 200,201,...no exception
         if (code >= 400 && code < 600) {
+            throw new CytomineException(code, json);
+        } else if (code == 301) {
             throw new CytomineException(code, json);
         } else if (code == 302) {
             throw new CytomineException(code, json);
@@ -202,7 +205,9 @@ public class CytomineConnection {
             String response = client.getResponseData();
             log.debug("response=" + response);
             client.disconnect();
-            return createJSONResponse(code, response);
+            JSONObject json = createJSONResponse(code, response);
+            analyzeCode(code, json);
+            return json;
         } catch (IOException e) {
             throw new CytomineException(e);
         }
