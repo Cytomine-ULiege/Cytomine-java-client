@@ -2,7 +2,6 @@
 
 > Cytomine-java-client is an open-source Cytomine client written in Java. This client is a Java wrapper around Cytomine REST API gateway.
 
-[![Build Status](https://travis-ci.com/Cytomine-ULiege/Cytomine-java-client.svg?branch=master)](https://travis-ci.com/Cytomine-ULiege/Cytomine-java-client)
 [![GitHub release](https://img.shields.io/github/release/Cytomine-ULiege/Cytomine-java-client.svg)](https://github.com/Cytomine-ULiege/Cytomine-java-client/releases)
 [![GitHub](https://img.shields.io/github/license/Cytomine-ULiege/Cytomine-java-client.svg)](https://github.com/Cytomine-ULiege/Cytomine-java-client/blob/master/LICENSE)
 
